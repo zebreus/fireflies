@@ -57,9 +57,8 @@ def draw_fireflies(x, y, lightness):
                 cursor.x + x + window_size.x / 2, cursor.y + y + window_size.y / 2
             ),
             10,
-            0x000000FF | (c << 24) | (c << 8),
+            0xff0000FF | (int(c) << 24) | (int(c) << 8),
         )
-
 
 class FirefliesVisualizer:
     def __init__(self):
