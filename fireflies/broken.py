@@ -1,3 +1,6 @@
+from scipy.stats import circmean
+import numpy as np
+
 class Pulse:
     def __init__(self, sender, ago):
         # The sender usually sends the pulse a few millis after it actually pulsed
@@ -19,26 +22,42 @@ class Firefly:
     # Value from 0 to 255. Will be read by the main loop
     brightness = 0
 
+    time = 0
+    received_pulses = []
+    current_pulse_length = None
+
     def __init__(self):
         self.speed = 1.0
     
     def tick(self, delta):
-        new_pulse_progress = self.pulse_progress + (delta * self.speed)
-        if (new_pulse_progress) >= self.preferred_pulse_length:
-            # How much time the pulse was ago
-            pulseAgo = ((new_pulse_progress) % self.preferred_pulse_length) / self.speed
-            # Reset speed
-            # self.speed = 1.0
+        if self.current_pulse_length == None or self.current_pulse_length == 0:
+            self.current_pulse_length = self.preferred_pulse_length
+        self.time += delta
+        self.pulse_progress = self.pulse_progress + delta
+        if self.pulse_progress >= self.current_pulse_length:
+            pulseAgo = self.pulse_progress % self.current_pulse_length
             self.send_pulse(Pulse(self.name, pulseAgo))
-        self.pulse_progress = (new_pulse_progress) % self.preferred_pulse_length
-        self.brightness = (self.pulse_progress / self.preferred_pulse_length) * 255
+            self.pulse_progress = 0
+            # How much time the pulse was ago
+            # Reset speed
+
+            own_offset = self.time % self.preferred_pulse_length
+
+            rp2 = []
+            for pulse in self.received_pulses:
+                offset = (((self.time - pulse)) % self.preferred_pulse_length) 
+                rp2.append(offset)
+
+            if rp2 == []:
+                rp2=[0]
+            mean_shift = circmean(samples = rp2, low = 0.0, high = self.preferred_pulse_length)
+            adjusted_pulse_length = self.preferred_pulse_length - mean_shift if mean_shift < (0.5 * self.preferred_pulse_length) else mean_shift 
+            self.current_pulse_length = ((1.0 -self.dampening) * adjusted_pulse_length) + (self.dampening * self.preferred_pulse_length) 
+            # self.speed = self.dampening * self.speed + (1.0 -self.dampening) * new_speed
+            self.received_pulses.clear()
+        self.brightness = (self.pulse_progress / self.current_pulse_length) * 255
     
     def receive_pulse(self, pulse):
         # What our own pulse progress was, when the other pulse was send
-        received_at = self.pulse_progress - pulse.ago
-        # received_at = 0.90% => speed = 1.25
-        received_at_percentage = received_at / self.preferred_pulse_length
-        if received_at_percentage > 0.5 and received_at_percentage < 0.99:
-            self.pulse_progress = self.preferred_pulse_length - 1
-        if received_at_percentage > 0.01 and received_at_percentage <= 0.50:
-            self.pulse_progress = self.preferred_pulse_length - 1
+        received_at = self.time - pulse.ago
+        self.received_pulses.append(received_at)
