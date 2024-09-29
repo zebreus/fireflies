@@ -2,8 +2,9 @@
 import numpy as np
 from imgui_bundle import hello_imgui, imgui
 from scipy.spatial import KDTree
-from fireflies.basic import Firefly
-# from fireflies.broken import Firefly
+from scipy.ndimage import shift as spshift
+# from fireflies.basic import Firefly
+from fireflies.broken import Firefly
 
 def xy_random_normal(count: int, sigma_x: float, sigma_y: float, seed: int):
     rng = np.random.default_rng(seed)
@@ -86,21 +87,24 @@ class FirefliesVisualizer:
         self.transmission_time_sigma = 0
         self.transmission_error_rate = 0
         self.transmission_rng = None
+        self.brightness_history = np.zeros((1000), dtype = np.float32)
 
     def frame(self):
         if(hello_imgui.get_runner_params().app_shall_exit == True):
             return
         imgui.set_next_window_pos(imgui.ImVec2(0.0, 20.0))
         w, h = imgui.get_io().display_size
-        imgui.set_next_window_size(imgui.ImVec2(w*0.66, h*0.9))
+        imgui.set_next_window_size(imgui.ImVec2(w*0.5, h*0.9))
         imgui.begin("Fireflies")
         if not self.x is None and not self.y is None:
             # self.c = (128 + 128*np.cos(self.freq*self.t + self.phase)).astype(np.uint8)
+            total_brightness = 0
             for i, (x, y) in enumerate(zip(self.x, self.y)):
                 # if np.random.random() > 0.5:
                 #     continue
                 # neighbours = self.neighbour_tree.query_ball_point((x, y), self.radius, 2)
                 self.fireflies[i].tick(self.speed)
+                total_brightness += self.fireflies[i].brightness
                 unprocessed_events = []
                 for event in self.events[i]:
                     if event[0] > self.t:
@@ -110,6 +114,8 @@ class FirefliesVisualizer:
                 self.events[i] = unprocessed_events
                 # self.phase[i] = self.phase[i]*self.phase_dampening + self.phase_step*np.mean(self.phase[neighbours])
                 # self.freq[i] = self.freq[i]*self.freq_dampening + self.freq_step*np.mean(self.freq[neighbours])
+            total_brightness /= self.count
+            self.brightness_history = spshift(self.brightness_history,1,cval = total_brightness)
             draw_fireflies(self.x, self.y, self.fireflies)
             draw_list = imgui.get_window_draw_list()
             window_size = imgui.get_window_size()
@@ -122,8 +128,8 @@ class FirefliesVisualizer:
                 0x000000FF | (255 << 24))
             
         imgui.end()
-        imgui.set_next_window_pos(imgui.ImVec2(w*0.66, 0))
-        imgui.set_window_size(imgui.ImVec2(0.33*w, 0.9*h))
+        imgui.set_next_window_pos(imgui.ImVec2(w*0.5, 0))
+        imgui.set_window_size(imgui.ImVec2(0.25*w, 0.9*h))
         imgui.begin("Settings")
         imgui.collapsing_header("Setup")
         count_changed, self.count = imgui.slider_int("Count", self.count, 1, 400)
@@ -144,6 +150,14 @@ class FirefliesVisualizer:
         transmission_time_sigma_changed, self.transmission_time_sigma = imgui.slider_int("Transmission Time Sigma", self.transmission_time_sigma, 0, 100)
         transmission_error_rate_changed, self.transmission_error_rate = imgui.slider_float("Transmission Error Rate", self.transmission_error_rate, 0.0, 1.0)
         imgui.end()
+
+        imgui.set_next_window_pos(imgui.ImVec2(w*0.75, 0))
+        imgui.set_window_size(imgui.ImVec2(0.25*w, 0.9*h))
+        imgui.begin("Stats")
+        
+        imgui.plot_lines(label= "Brightness", values=self.brightness_history,scale_min = 0, scale_max= 255,graph_size = imgui.ImVec2(400, 100))
+        imgui.end()
+
         self.t += self.speed
         # After changing one of these properties we need to reset the simulation
         resetup = any([count_changed, sigma_x_changed, sigma_y_changed, seed_changed, initial_phase_sigma_changed]) or (self.events is None)
@@ -152,7 +166,7 @@ class FirefliesVisualizer:
         if resetup:
             self.x, self.y = xy_random_normal(self.count, self.sigma_x, self.sigma_y, self.seed)
             self.data = np.stack((self.x, self.y), axis=1)
-            self.neighbour_tree = KDTree(data=self.data, leafsize=25)
+            self.neighbour_tree = KDTree(data=self.data, leafsize=40)
             self.fireflies = np.empty( (self.count), dtype=object)
             self.events = np.empty( (self.count), dtype=object)
             rng = np.random.default_rng(self.seed)
@@ -198,7 +212,7 @@ if __name__ == "__main__":
     fireflies_visualizer = FirefliesVisualizer()
     callbacks = hello_imgui.RunnerCallbacks(fireflies_visualizer.frame, show_status=status)
     fps_idling = hello_imgui.FpsIdling(200, enable_idling=False)
-    appwindow_params = hello_imgui.AppWindowParams("Fireflies")
+    appwindow_params = hello_imgui.AppWindowParams("Fireflies",restore_previous_geometry = True)
     imgui_window_params = hello_imgui.ImGuiWindowParams(show_menu_bar=True, show_status_bar=True)
     runner_params = hello_imgui.RunnerParams(callbacks, appwindow_params,imgui_window_params, fps_idling=fps_idling)
     hello_imgui.run(runner_params)
