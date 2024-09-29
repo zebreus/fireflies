@@ -7,13 +7,16 @@ class Pulse:
         self.sender = sender
 
 class Firefly:
-    def __init__(self, name, send_pulse, preferred_pulse_length = 300, initial_time = 0):
-        self.brightness = initial_time
-        self.preferred_pulse_length = preferred_pulse_length
-        self.pulse_progress = initial_time
-        self.send_pulse = send_pulse
-        self.name = name
-    
+    # These values will be set by the main loop
+    name = ""
+    preferred_pulse_length = 0
+    send_pulse = None
+    pulse_progress = 0
+    dampening = 0.5
+
+    # Value from 0 to 255. Will be read by the main loop
+    brightness = 0
+
     def tick(self, delta):
         if (self.pulse_progress + delta) >= self.preferred_pulse_length:
             # How much time the pulse was ago
